@@ -35,12 +35,12 @@ typedef enum {
 /// two additional bits are added at the end with actual compare values of 0.
 #define DSHOT_DMA_BUFFER_SIZE 18
 
-#define MOTOR1_TIM (htim1)
-#define MOTOR1_TIM_CHANNEL TIM_CHANNEL_1
-#define DSHOT_UPDATE_TIM (htim2)
-
 // test
 #define MOTOR_1_TIM (&htim1)
+#define MOTOR1_TIM_CHANNEL TIM_CHANNEL_1
+
 void dshot_init(void);
 void dshot_write(uint16_t* motor_value);
+void dshot_loop(void);
+
 #endif  // RM_DSHOT_DSHOT_H

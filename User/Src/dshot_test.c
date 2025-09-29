@@ -24,6 +24,9 @@ static uint16_t dshot_prepare_packet(uint16_t value, bool requestTelemetry) {
         csum ^= csum_data;  // xor data by nibbles
         csum_data >>= 4;
     }
+#ifdef USE_TEMLEMETRY
+    csum = ~csum;  // BDshot telemetry request inverts the checksum
+#endif
     // Protect lower 4 bits
     csum &= 0xf;
     // append checksum
@@ -78,18 +81,23 @@ static void dshot_put_tc_callback_function() {
     MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dshot_dma_tc_callback;
 }
 
+/// @brief Send all zero signal to unlock the ESC
+void esc_unlock(void) {
+    /// Send some zero signal to initialize the ESC
+    uint32_t start = HAL_GetTick();
+    uint16_t my_motor_value[4] = {0, 0, 0, 0};
+    while (HAL_GetTick() - start < 3000) {
+        dshot_write(my_motor_value);
+        HAL_Delay(1);
+    }
+}
+
 /// @brief dshot init
 void dshot_init(void) {
     printf("Dshot init start\r\n");
     dshot_put_tc_callback_function();
-    dshot_start_pwm();  // Start the dshot timer
-    /// Send some zero signal to initialize the ESC
-    uint32_t start = HAL_GetTick();
-    uint16_t my_motor_value[4] = {0, 0, 0, 0};
-    while (HAL_GetTick() - start < 4000) {
-        dshot_write(my_motor_value);
-        HAL_Delay(1);
-    }
+    dshot_start_pwm();
+    esc_unlock();
     printf("Init complete\r\n");
 }
 
@@ -98,4 +106,14 @@ void dshot_write(uint16_t *motor_value) {
     dshot_prepare_dmabuffer_all(motor_value);
     dshot_dma_start();
     dshot_enable_dma_request();
+}
+
+void dshot_loop(void) {
+    uint16_t my_motor_value[4] = {0, 0, 0, 0};
+    uint16_t value = 0;
+    for (int i = 0; i < 4; i++) {
+        my_motor_value[i] = value;
+    }
+    dshot_write(my_motor_value);
+    HAL_Delay(1);
 }
