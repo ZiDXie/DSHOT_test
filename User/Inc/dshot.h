@@ -39,11 +39,8 @@ typedef enum {
 #define MOTOR1_TIM_CHANNEL TIM_CHANNEL_1
 #define DSHOT_UPDATE_TIM (htim2)
 
-void dshotInit();
-void dshotLoop();
-
-//test
-#define MOTOR_1_TIM             (&htim1)
+// test
+#define MOTOR_1_TIM (&htim1)
 void dshot_init(void);
 void dshot_write(uint16_t* motor_value);
 #endif  // RM_DSHOT_DSHOT_H
