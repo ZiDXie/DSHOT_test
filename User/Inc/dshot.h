@@ -40,7 +40,7 @@ typedef enum {
 #define MOTOR1_TIM_CHANNEL TIM_CHANNEL_1
 
 void dshot_init(void);
-void dshot_write(uint16_t* motor_value);
-void dshot_loop(void);
+void dshot_write(uint16_t* motor_value, bool requestTelemetry);
+void dshot_send(uint16_t* motor_value, bool requestTelemetry);
 
 #endif  // RM_DSHOT_DSHOT_H

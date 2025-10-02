@@ -35,9 +35,9 @@ static uint16_t dshot_prepare_packet(uint16_t value, bool requestTelemetry) {
 }
 
 // Convert 16 bits packet to 16 pwm signal
-static void dshot_prepare_dmabuffer(uint32_t *motor_dmabuffer, uint16_t value) {
+static void dshot_prepare_dmabuffer(uint32_t *motor_dmabuffer, uint16_t value, bool requestTelemetry) {
     uint16_t packet;
-    packet = dshot_prepare_packet(value, false);
+    packet = dshot_prepare_packet(value, requestTelemetry);
 
     for (int i = 0; i < 16; i++) {
         motor_dmabuffer[i] = (packet & 0x8000) ? MOTOR_BIT_1 : MOTOR_BIT_0;
@@ -50,8 +50,8 @@ static void dshot_prepare_dmabuffer(uint32_t *motor_dmabuffer, uint16_t value) {
 
 /// @brief Prepare the dshot dma buffer for all motors
 /// @param motor_value The motor value array
-static void dshot_prepare_dmabuffer_all(uint16_t *motor_value) {
-    dshot_prepare_dmabuffer(motor1_dmabuffer, motor_value[0]);
+static void dshot_prepare_dmabuffer_all(uint16_t *motor_value, bool requestTelemetry) {
+    dshot_prepare_dmabuffer(motor1_dmabuffer, motor_value[0], requestTelemetry);
 }
 
 /// @brief Start the dshot timer
@@ -87,8 +87,26 @@ void esc_unlock(void) {
     uint32_t start = HAL_GetTick();
     uint16_t my_motor_value[4] = {0, 0, 0, 0};
     while (HAL_GetTick() - start < 3000) {
-        dshot_write(my_motor_value);
-        HAL_Delay(1);
+        dshot_send(my_motor_value, false);
+    }
+}
+
+/// @brief Save the config to the ESC
+void esc_save_config() {
+    uint16_t motor_value[4] = {12, 12, 12, 12};
+    uint32_t start = HAL_GetTick();
+    while (HAL_GetTick() - start < 2000) {  // Todo: find fitable time
+        dshot_send(motor_value, true);
+    }
+}
+
+/// @brief Change the motor rotation direction
+void dshot_change_rotation(uint8_t motor_index) {
+    uint16_t motor_value[4] = {0, 0, 0, 0};
+    motor_value[motor_index] = 7;
+    uint32_t start = HAL_GetTick();
+    while (HAL_GetTick() - start < 2000) {  // Todo: find fitable time
+        dshot_send(motor_value, true);
     }
 }
 
@@ -102,18 +120,24 @@ void dshot_init(void) {
 }
 
 /// @brief Write the motor value to the motor
-void dshot_write(uint16_t *motor_value) {
-    dshot_prepare_dmabuffer_all(motor_value);
+void dshot_write(uint16_t *motor_value, bool requestTelemetry) {
+    dshot_prepare_dmabuffer_all(motor_value, requestTelemetry);
     dshot_dma_start();
     dshot_enable_dma_request();
 }
 
+/// @brief Send the motor value to the motor
+void dshot_send(uint16_t *motor_value, bool requestTelemetry) {
+    dshot_write(motor_value, requestTelemetry);
+    HAL_Delay(1);
+}
+
+/// @brief Dshot test loop
 void dshot_loop(void) {
     uint16_t my_motor_value[4] = {0, 0, 0, 0};
     uint16_t value = 0;
     for (int i = 0; i < 4; i++) {
         my_motor_value[i] = value;
     }
-    dshot_write(my_motor_value);
-    HAL_Delay(1);
+    dshot_send(my_motor_value, false);
 }
