@@ -17,6 +17,11 @@
 #define MOTOR_DSHOT600_HZ MHZ_TO_HZ(12)
 #define MOTOR_DSHOT300_HZ MHZ_TO_HZ(6)
 #define MOTOR_DSHOT150_HZ MHZ_TO_HZ(3)
+#define DSHOT_TELEMETRY_NOEDGE (0xfffe)
+#define DSHOT_TELEMETRY_INVALID (0xffff)
+#define ERPM_PER_LSB 100.0f
+#define SECONDS_PER_MINUTE 60.0f
+#define MOTOR_POLE_COUNT 14.0  // Should be set according to the actual motor pole count
 
 typedef enum {
     MOTOR_PROTOCOL_DSHOT150,
@@ -24,8 +29,7 @@ typedef enum {
     MOTOR_PROTOCOL_DSHOT600,
 } motorProtocolTypes_e;
 
-/// For dshot600 on 168MHz F407
-/// The term of pwm is 1.67us,the bit1 is 1.25us high level, and the bit0 is 0.625us high level
+/// For dshot600.The term of pwm is 1.67us,the bit1 is 1.25us high level, and the bit0 is 0.625us high level
 #define MOTOR_BIT_0 7
 #define MOTOR_BIT_1 14
 #define MOTOR_BITLENGTH 20
