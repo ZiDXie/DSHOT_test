@@ -77,6 +77,53 @@ static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {
 
 float erpmToRpm(uint32_t erpm) { return erpm * erpmToHz * SECONDS_PER_MINUTE; }
 
+/// @brief Get rpm from the telemetry value
+/// @param buffer
+/// @param count
+/// @return
+static uint32_t decode_telemetry_packet(const uint32_t buffer[], uint32_t count) {
+    uint32_t value = 0;
+    uint32_t oldValue = buffer[0];
+    int bits = 0;
+    int len;
+    for (uint32_t i = 1; i <= count; i++) {
+        if (i < count) {
+            int diff = buffer[i] - oldValue;
+            if (bits >= 21) {
+                break;
+            }
+            len = (diff + 8) / 16;
+        } else {
+            len = 21 - bits;
+        }
+
+        value <<= len;
+        value |= 1 << (len - 1);
+        oldValue = buffer[i];
+        bits += len;
+    }
+    if (bits != 21) {
+        return 0xffff;
+    }
+
+    static const uint32_t decode[32] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 11, 0, 13, 14, 15,
+                                        0, 0, 2, 3, 0, 5, 6, 7, 0, 0, 8,  1,  0, 4,  12, 0};
+
+    uint32_t decodedValue = decode[value & 0x1f];
+    decodedValue |= decode[(value >> 5) & 0x1f] << 4;
+    decodedValue |= decode[(value >> 10) & 0x1f] << 8;
+    decodedValue |= decode[(value >> 15) & 0x1f] << 12;
+
+    uint32_t csum = decodedValue;
+    csum = csum ^ (csum >> 8);  // xor bytes
+    csum = csum ^ (csum >> 4);  // xor nibbles
+
+    if ((csum & 0xf) != 0xf) {
+        return DSHOT_TELEMETRY_INVALID;
+    }
+
+    return decodedValue >> 4;
+}
 
 /// @brief Start the dshot timer
 void dshot_start_pwm() {
