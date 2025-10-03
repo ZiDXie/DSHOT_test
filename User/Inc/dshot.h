@@ -42,6 +42,8 @@ typedef enum {
 // test
 #define MOTOR_1_TIM (&htim1)
 #define MOTOR1_TIM_CHANNEL TIM_CHANNEL_1
+#define MOTOR_2_TIM (&htim1)
+#define MOTOR2_TIM_CHANNEL TIM_CHANNEL_2
 
 void dshot_init(void);
 void dshot_write(uint16_t* motor_value, bool requestTelemetry);

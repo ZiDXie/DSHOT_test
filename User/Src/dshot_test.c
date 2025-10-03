@@ -55,6 +55,7 @@ static void dshot_prepare_dmabuffer(uint32_t *motor_dmabuffer, uint16_t value, b
 /// @param motor_value The motor value array
 static void dshot_prepare_dmabuffer_all(uint16_t *motor_value, bool requestTelemetry) {
     dshot_prepare_dmabuffer(motor1_dmabuffer, motor_value[0], requestTelemetry);
+    dshot_prepare_dmabuffer(motor2_dmabuffer, motor_value[1], requestTelemetry);
 }
 
 /// @brief Decode the eRPM telemetry value from the ESC
@@ -74,23 +75,28 @@ static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {
     return (1000000 * 60 / 100 + value / 2) / value;
 }
 
-float erpmToRpm(uint32_t erpm) {
-    // rpm = (erpm * ERPM_PER_LSB) / (motorConfig()->motorPoleCount / 2)
-    return erpm * erpmToHz * SECONDS_PER_MINUTE;
-}
+float erpmToRpm(uint32_t erpm) { return erpm * erpmToHz * SECONDS_PER_MINUTE; }
 
 
 /// @brief Start the dshot timer
-void dshot_start_pwm() { HAL_TIM_PWM_Start(MOTOR_1_TIM, MOTOR1_TIM_CHANNEL); }
+void dshot_start_pwm() {
+    HAL_TIM_PWM_Start(MOTOR_1_TIM, MOTOR1_TIM_CHANNEL);
+    HAL_TIM_PWM_Start(MOTOR_2_TIM, MOTOR2_TIM_CHANNEL);
+}
 
 /// @brief Start the dshot dma
 static void dshot_dma_start() {
     HAL_DMA_Start_IT(MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor1_dmabuffer,
                      (uint32_t) &MOTOR_1_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
+    HAL_DMA_Start_IT(MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor2_dmabuffer,
+                     (uint32_t) &MOTOR_2_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
 }
 
 /// @brief Enable the dshot dma request
-static void dshot_enable_dma_request() { __HAL_TIM_ENABLE_DMA(MOTOR_1_TIM, TIM_DMA_CC1); }
+static void dshot_enable_dma_request() {
+    __HAL_TIM_ENABLE_DMA(MOTOR_1_TIM, TIM_DMA_CC1);
+    __HAL_TIM_ENABLE_DMA(MOTOR_2_TIM, TIM_DMA_CC2);
+}
 
 /// @brief Dma transfer complete callback
 static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
@@ -99,12 +105,16 @@ static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
     if (hdma == htim->hdma[TIM_DMA_ID_CC1]) {
         __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC1);
     }
+    if (hdma == htim->hdma[TIM_DMA_ID_CC2]) {
+        __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC2);
+    }
 }
 
 /// @brief Put the dma transfer complete callback function to the timer dma handle
 static void dshot_put_tc_callback_function() {
     // TIM_DMA_ID_CCx depends on timer channel
     MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dshot_dma_tc_callback;
+    MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2]->XferCpltCallback = dshot_dma_tc_callback;
 }
 
 /// @brief Send all zero signal to unlock the ESC
@@ -117,15 +127,6 @@ void esc_unlock(void) {
     }
 }
 
-/// @brief Save the config to the ESC
-void esc_save_config() {
-    uint16_t motor_value[4] = {12, 12, 12, 12};
-    uint32_t start = HAL_GetTick();
-    while (HAL_GetTick() - start < 2000) {  // Todo: find fitable time
-        dshot_send(motor_value, true);
-    }
-}
-
 /// @brief Change the motor rotation direction
 void dshot_change_rotation(uint8_t motor_index) {
     uint16_t motor_value[4] = {0, 0, 0, 0};
@@ -134,7 +135,6 @@ void dshot_change_rotation(uint8_t motor_index) {
     while (HAL_GetTick() - start < 2000) {  // Todo: find fitable time
         dshot_send(motor_value, true);
     }
-    esc_save_config();
 }
 
 /// @brief dshot init
