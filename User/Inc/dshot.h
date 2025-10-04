@@ -14,13 +14,15 @@
 #include "tim.h"
 
 
-// #define USE_TEMLEMETRY
+#define USE_TEMLEMETRY
 
 #define MHZ_TO_HZ(x) ((x) * 1000000)
 
-#define MOTOR_DSHOT600_HZ MHZ_TO_HZ(12)
-#define MOTOR_DSHOT300_HZ MHZ_TO_HZ(6)
-#define MOTOR_DSHOT150_HZ MHZ_TO_HZ(3)
+#define DSHOT600_HZ MHZ_TO_HZ(12)
+#define DSHOT300_HZ MHZ_TO_HZ(6)
+#define DSHOT150_HZ MHZ_TO_HZ(3)
+#define BIDSHOT_RESPONSE_HZ MHZ_TO_HZ(6 * 5 / 4)  // For dshot600
+
 #define DSHOT_TELEMETRY_NOEDGE (0xfffe)
 #define DSHOT_TELEMETRY_INVALID (0xffff)
 #define ERPM_PER_LSB 100.0f
@@ -42,6 +44,7 @@ typedef enum {
 /// but since the TIM BURST DMA method requires resetting at the end of the frame to prevent continuous signal output,
 /// two additional bits are added at the end with actual compare values of 0.
 #define DSHOT_DMA_BUFFER_SIZE 18
+#define BIDSHOT_RESPONSE_BUFFER_SIZE 21
 
 // test
 #define MOTOR_1_TIM (&htim1)

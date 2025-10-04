@@ -128,7 +128,7 @@ static uint32_t decode_telemetry_packet(const uint32_t buffer[], uint32_t count)
 
 void gpio_set_input(uint8_t motor_index) {
     uint16_t MOTOR_PIN[2] = {MOTOR1_PIN, MOTOR2_PIN};
-    uint16_t MOTOR_PIN_GPIO_PORT[2] = {MOTOR1_PIN_GPIO_PORT, MOTOR2_PIN_GPIO_PORT};
+    GPIO_TypeDef *MOTOR_PIN_GPIO_PORT[2] = {MOTOR1_PIN_GPIO_PORT, MOTOR2_PIN_GPIO_PORT};
 
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     GPIO_InitStruct.Pin = MOTOR_PIN[motor_index];
