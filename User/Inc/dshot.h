@@ -6,11 +6,15 @@
 #define RM_DSHOT_DSHOT_H
 
 // User include
+#include "gpio.h"
 #include "main.h"
 #include "math.h"
 #include "stdbool.h"
 #include "stdio.h"
 #include "tim.h"
+
+
+// #define USE_TEMLEMETRY
 
 #define MHZ_TO_HZ(x) ((x) * 1000000)
 
@@ -42,8 +46,12 @@ typedef enum {
 // test
 #define MOTOR_1_TIM (&htim1)
 #define MOTOR1_TIM_CHANNEL TIM_CHANNEL_1
+#define MOTOR1_PIN_GPIO_PORT GPIOA
+#define MOTOR1_PIN GPIO_PIN_8
 #define MOTOR_2_TIM (&htim1)
 #define MOTOR2_TIM_CHANNEL TIM_CHANNEL_2
+#define MOTOR2_PIN_GPIO_PORT GPIOA
+#define MOTOR2_PIN GPIO_PIN_9
 
 void dshot_init(void);
 void dshot_write(uint16_t* motor_value, bool requestTelemetry);

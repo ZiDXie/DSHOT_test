@@ -6,8 +6,11 @@
 
 static uint32_t motor1_dmabuffer[DSHOT_DMA_BUFFER_SIZE];
 static uint32_t motor2_dmabuffer[DSHOT_DMA_BUFFER_SIZE];
+
+#ifdef USE_TEMLEMETRY
 static float erpmToHz = ERPM_PER_LSB / SECONDS_PER_MINUTE / (MOTOR_POLE_COUNT / 2.0f);
-bool useDshotTelemetry;
+bool useDshotTelemetry = false;
+#endif
 
 /// @brief To prepare the dshot packet
 /// @param value
@@ -58,6 +61,7 @@ static void dshot_prepare_dmabuffer_all(uint16_t *motor_value, bool requestTelem
     dshot_prepare_dmabuffer(motor2_dmabuffer, motor_value[1], requestTelemetry);
 }
 
+#ifdef USE_TEMLEMETRY
 /// @brief Decode the eRPM telemetry value from the ESC
 static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {
     // eRPM range
@@ -78,9 +82,6 @@ static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {
 float erpmToRpm(uint32_t erpm) { return erpm * erpmToHz * SECONDS_PER_MINUTE; }
 
 /// @brief Get rpm from the telemetry value
-/// @param buffer
-/// @param count
-/// @return
 static uint32_t decode_telemetry_packet(const uint32_t buffer[], uint32_t count) {
     uint32_t value = 0;
     uint32_t oldValue = buffer[0];
@@ -124,6 +125,18 @@ static uint32_t decode_telemetry_packet(const uint32_t buffer[], uint32_t count)
 
     return decodedValue >> 4;
 }
+
+void gpio_set_input(uint8_t motor_index) {
+    uint16_t MOTOR_PIN[2] = {MOTOR1_PIN, MOTOR2_PIN};
+    uint16_t MOTOR_PIN_GPIO_PORT[2] = {MOTOR1_PIN_GPIO_PORT, MOTOR2_PIN_GPIO_PORT};
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = MOTOR_PIN[motor_index];
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
+#endif
 
 /// @brief Start the dshot timer
 void dshot_start_pwm() {
@@ -171,16 +184,6 @@ void esc_unlock(void) {
     uint16_t my_motor_value[4] = {0, 0, 0, 0};
     while (HAL_GetTick() - start < 3000) {
         dshot_send(my_motor_value, false);
-    }
-}
-
-/// @brief Change the motor rotation direction
-void dshot_change_rotation(uint8_t motor_index) {
-    uint16_t motor_value[4] = {0, 0, 0, 0};
-    motor_value[motor_index] = 7;
-    uint32_t start = HAL_GetTick();
-    while (HAL_GetTick() - start < 2000) {  // Todo: find fitable time
-        dshot_send(motor_value, true);
     }
 }
 
