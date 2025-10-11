@@ -14,7 +14,7 @@
 #include "tim.h"
 
 
-#define USE_TEMLEMETRY
+// #define USE_TEMLEMETRY
 
 #define MHZ_TO_HZ(x) ((x) * 1000000)
 
@@ -59,5 +59,5 @@ typedef enum {
 void dshot_init(void);
 void dshot_write(uint16_t* motor_value, bool requestTelemetry);
 void dshot_send(uint16_t* motor_value, bool requestTelemetry);
-
+void dshot_loop(void);
 #endif  // RM_DSHOT_DSHOT_H

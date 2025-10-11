@@ -130,11 +130,17 @@ void gpio_set_input(uint8_t motor_index) {
     uint16_t MOTOR_PIN[2] = {MOTOR1_PIN, MOTOR2_PIN};
     GPIO_TypeDef *MOTOR_PIN_GPIO_PORT[2] = {MOTOR1_PIN_GPIO_PORT, MOTOR2_PIN_GPIO_PORT};
 
+    // Set the pin to input mode with pull-up resistor
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     GPIO_InitStruct.Pin = MOTOR_PIN[motor_index];
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    //
+    htim1.Instance = TIM1;
+
+    // Deinitialize the DMA associated with the timer channel
 }
 #endif
 
@@ -164,9 +170,17 @@ static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
 
     if (hdma == htim->hdma[TIM_DMA_ID_CC1]) {
         __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC1);
+#ifdef USE_TEMLEMETRY
+        if (useDshotTelemetry) {
+        }
+#endif
     }
     if (hdma == htim->hdma[TIM_DMA_ID_CC2]) {
         __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC2);
+#ifdef USE_TEMLEMETRY
+        if (useDshotTelemetry) {
+        }
+#endif
     }
 }
 
@@ -193,6 +207,9 @@ void dshot_init(void) {
     dshot_put_tc_callback_function();
     dshot_start_pwm();
     esc_unlock();
+#ifdef USE_TEMLEMETRY
+    useDshotTelemetry = true;
+#endif
     printf("Init complete\r\n");
 }
 
@@ -212,7 +229,7 @@ void dshot_send(uint16_t *motor_value, bool requestTelemetry) {
 /// @brief Dshot test loop
 void dshot_loop(void) {
     uint16_t my_motor_value[4] = {0, 0, 0, 0};
-    uint16_t value = 0;
+    uint16_t value = 100;
     for (int i = 0; i < 4; i++) {
         my_motor_value[i] = value;
     }
