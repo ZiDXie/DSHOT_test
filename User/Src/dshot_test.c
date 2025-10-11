@@ -195,10 +195,31 @@ static void dshot_put_tc_callback_function() {
 void esc_unlock(void) {
     /// Send zero signal to initialize the ESC
     uint32_t start = HAL_GetTick();
-    uint16_t my_motor_value[4] = {0, 0, 0, 0};
+    uint16_t motor_value[4] = {0, 0, 0, 0};
     while (HAL_GetTick() - start < 3000) {
-        dshot_send(my_motor_value, false);
+        dshot_send(motor_value, false);
     }
+}
+
+/// @brief change the motor rotation direction
+/// @param change
+void motor_change_rotation(uint16_t motor_index, bool change) {
+    uint16_t command = 0;
+    if (change) {
+        command = 8;
+    }
+    uint32_t start = HAL_GetTick();
+    uint16_t motor_value[4] = {0, 0, 0, 0};
+    motor_value[motor_index] = command;
+    while (HAL_GetTick() - start < 50) {
+        dshot_send(motor_value, true);
+    }
+}
+
+/// @brief configure the motor
+void motor_configure() {
+    motor_change_rotation(0, true);
+    motor_change_rotation(1, false);
 }
 
 /// @brief dshot init
@@ -207,6 +228,7 @@ void dshot_init(void) {
     dshot_put_tc_callback_function();
     dshot_start_pwm();
     esc_unlock();
+    motor_configure();
 #ifdef USE_TEMLEMETRY
     useDshotTelemetry = true;
 #endif
@@ -228,10 +250,10 @@ void dshot_send(uint16_t *motor_value, bool requestTelemetry) {
 
 /// @brief Dshot test loop
 void dshot_loop(void) {
-    uint16_t my_motor_value[4] = {0, 0, 0, 0};
-    uint16_t value = 100;
+    uint16_t motor_value[4] = {0, 0, 0, 0};
+    uint16_t command = 100;
     for (int i = 0; i < 4; i++) {
-        my_motor_value[i] = value;
+        motor_value[i] = command;
     }
-    dshot_send(my_motor_value, false);
+    dshot_send(motor_value, false);
 }
