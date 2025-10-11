@@ -61,6 +61,24 @@ static void dshot_prepare_dmabuffer_all(uint16_t *motor_value, bool requestTelem
     dshot_prepare_dmabuffer(motor2_dmabuffer, motor_value[1], requestTelemetry);
 }
 
+/// @brief Convert rpm to dshot value
+uint16_t rpm_to_dshot_value(float rpm) {
+    if (rpm > MOTOR_MAX_RPM) {
+        rpm = MOTOR_MAX_RPM;
+    } else if (rpm < 0) {
+        rpm = 0;
+    }
+    float percent = rpm / MOTOR_MAX_RPM;
+    int dshot_value = (int) (48+(percent * (2047 - 48)));
+    // Clamp the value to the valid range
+    if (dshot_value < 48) {
+        dshot_value = 48;
+    } else if (dshot_value > 2047) {
+        dshot_value = 2047;
+    }
+    return (uint16_t) dshot_value;
+}
+
 #ifdef USE_TEMLEMETRY
 /// @brief Decode the eRPM telemetry value from the ESC
 static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {

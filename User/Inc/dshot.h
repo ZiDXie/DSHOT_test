@@ -28,6 +28,9 @@
 #define ERPM_PER_LSB 100.0f
 #define SECONDS_PER_MINUTE 60.0f
 #define MOTOR_POLE_COUNT 14.0  // Should be set according to the actual motor pole count
+#define MOTOR_KV 24.48f  // Should be set according to the actual motor KV value
+#define MOTOR_MAX_VOLTAGE 24.0f  // Should be set according to the actual battery voltage
+#define MOTOR_MAX_RPM (MOTOR_KV * MOTOR_MAX_VOLTAGE)
 
 typedef enum {
     MOTOR_PROTOCOL_DSHOT150,
