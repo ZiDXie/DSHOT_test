@@ -69,7 +69,7 @@ uint16_t rpm_to_dshot_value(float rpm) {
         rpm = 0;
     }
     float percent = rpm / MOTOR_MAX_RPM;
-    int dshot_value = (int) (48+(percent * (2047 - 48)));
+    int dshot_value = (int) (48 + (percent * (2047 - 48)));
     // Clamp the value to the valid range
     if (dshot_value < 48) {
         dshot_value = 48;
