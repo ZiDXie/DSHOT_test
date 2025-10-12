@@ -6,6 +6,7 @@
 
 static uint32_t motor1_dmabuffer[DSHOT_DMA_BUFFER_SIZE];
 static uint32_t motor2_dmabuffer[DSHOT_DMA_BUFFER_SIZE];
+bool TIMER_OUTPUT_INVERTED = false;
 
 #ifdef USE_TEMLEMETRY
 static uint32_t motor1_response_buffer[BIDSHOT_RESPONSE_BUFFER_SIZE];
@@ -42,7 +43,7 @@ static uint16_t dshot_prepare_packet(uint16_t value, bool requestTelemetry) {
     return packet;
 }
 
-///@brief 16 bits packet to 16 pwm signal
+/// 16 bits packet to 16 pwm signal
 static void dshot_prepare_dmabuffer(uint32_t *motor_dmabuffer, uint16_t value, bool requestTelemetry) {
     uint16_t packet;
     packet = dshot_prepare_packet(value, requestTelemetry);
@@ -63,7 +64,7 @@ static void dshot_prepare_dmabuffer_all(uint16_t *motor_value, bool requestTelem
     dshot_prepare_dmabuffer(motor2_dmabuffer, motor_value[1], requestTelemetry);
 }
 
-/// @brief Convert rpm to dshot value
+/// Convert rpm to dshot value
 uint16_t rpm_to_dshot_value(float rpm) {
     if (rpm > MOTOR_MAX_RPM) {
         rpm = MOTOR_MAX_RPM;
@@ -82,7 +83,7 @@ uint16_t rpm_to_dshot_value(float rpm) {
 }
 
 #ifdef USE_TEMLEMETRY
-/// @brief Decode the eRPM telemetry value from the ESC
+/// Decode the eRPM telemetry value from the ESC
 static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {
     // eRPM range
     if (value == 0x0fff) {
@@ -101,7 +102,7 @@ static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {
 
 float erpmToRpm(uint32_t erpm) { return erpm * erpmToHz * SECONDS_PER_MINUTE; }
 
-/// @brief Get rpm from the telemetry value
+/// Get rpm from the telemetry value
 static uint32_t decode_telemetry_packet(const uint32_t buffer[], uint32_t count) {
     uint32_t value = 0;
     uint32_t oldValue = buffer[0];
@@ -146,6 +147,7 @@ static uint32_t decode_telemetry_packet(const uint32_t buffer[], uint32_t count)
     return decodedValue >> 4;
 }
 
+/// DMA transfer complete callback for input capture mode
 static void dshot_ic_dma_tc_callback(DMA_HandleTypeDef *hdma) {}
 
 /// Set the pin and timer channel to input capture mode
@@ -172,10 +174,10 @@ void dshot_set_input(uint8_t motor_index) {
     HAL_TIM_IC_Init(&htim1);
 
     TIM_IC_InitTypeDef sConfigIC = {0};
-    sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+    sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
     sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
     sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-    sConfigIC.ICFilter = 0;
+    sConfigIC.ICFilter = 2;
     HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CH[motor_index]);
 
     // Reinitialize the DMA associated with the timer channel
@@ -194,15 +196,18 @@ void dshot_set_input(uint8_t motor_index) {
         hdma->XferCpltCallback = dshot_ic_dma_tc_callback;
     }
 }
+
+/// Set the pin and timer channel to output pwm mode
+void dshot_set_output(uint8_t motor_index) {}
 #endif
 
-/// @brief Start the dshot timer
+/// Start the dshot timer
 void dshot_start_pwm() {
     HAL_TIM_PWM_Start(MOTOR_1_TIM, MOTOR1_TIM_CHANNEL);
     HAL_TIM_PWM_Start(MOTOR_2_TIM, MOTOR2_TIM_CHANNEL);
 }
 
-/// @brief Start the dshot dma
+/// Start the dshot dma
 static void dshot_dma_start() {
     HAL_DMA_Start_IT(MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor1_dmabuffer,
                      (uint32_t) &MOTOR_1_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
@@ -210,13 +215,13 @@ static void dshot_dma_start() {
                      (uint32_t) &MOTOR_2_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
 }
 
-/// @brief Enable the dshot dma request
+/// Enable the dshot dma request
 static void dshot_enable_dma_request() {
     __HAL_TIM_ENABLE_DMA(MOTOR_1_TIM, TIM_DMA_CC1);
     __HAL_TIM_ENABLE_DMA(MOTOR_2_TIM, TIM_DMA_CC2);
 }
 
-/// @brief Dma transfer complete callback
+/// Dma transfer complete callback
 static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
     TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_HandleTypeDef *) hdma)->Parent;
 
@@ -240,14 +245,14 @@ static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
     }
 }
 
-/// @brief Put the dma transfer complete callback function to the timer dma handle
+/// Put the dma transfer complete callback function to the timer dma handle
 static void dshot_put_tc_callback_function() {
     // TIM_DMA_ID_CCx depends on timer channel
     MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dshot_dma_tc_callback;
     MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2]->XferCpltCallback = dshot_dma_tc_callback;
 }
 
-/// @brief Send all zero signal to unlock the ESC
+/// Send all zero signal to unlock the ESC
 void esc_unlock(void) {
     /// Send zero signal to initialize the ESC
     uint32_t start = HAL_GetTick();
@@ -274,13 +279,13 @@ void motor_change_rotation(uint16_t motor_index, bool clockwise) {
     }
 }
 
-/// @brief configure the motor
+/// configure the motor
 void motor_configure() {
     motor_change_rotation(0, true);
     motor_change_rotation(1, false);
 }
 
-/// @brief dshot init
+/// dshot init
 void dshot_init(void) {
     printf("Dshot init start\r\n");
     dshot_put_tc_callback_function();
@@ -289,24 +294,25 @@ void dshot_init(void) {
     motor_configure();
 #ifdef USE_TEMLEMETRY
     useDshotTelemetry = true;
+    TIMER_OUTPUT_INVERTED = true;
 #endif
     printf("Init complete\r\n");
 }
 
-/// @brief Write the motor value to the motor
+/// Write the motor value to the motor
 void dshot_write(uint16_t *motor_value, bool requestTelemetry) {
     dshot_prepare_dmabuffer_all(motor_value, requestTelemetry);
     dshot_dma_start();
     dshot_enable_dma_request();
 }
 
-/// @brief Send the motor value to the motor
+/// Send the motor value to the motor
 void dshot_send(uint16_t *motor_value, bool requestTelemetry) {
     dshot_write(motor_value, requestTelemetry);
     HAL_Delay(1);
 }
 
-/// @brief Dshot test loop
+/// Dshot test loop
 void dshot_loop(void) {
     uint16_t motor_value[4] = {0, 0, 0, 0};
     uint16_t command = 100;

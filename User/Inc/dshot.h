@@ -38,7 +38,7 @@
 /// but since the TIM BURST DMA method requires resetting at the end of the frame to prevent continuous signal output,
 /// two additional bits are added at the end with actual compare values of 0.
 #define DSHOT_DMA_BUFFER_SIZE 18
-#define BIDSHOT_RESPONSE_BUFFER_SIZE 21
+#define BIDSHOT_RESPONSE_BUFFER_SIZE 22
 
 // test
 #define MOTOR_1_TIM (&htim1)
