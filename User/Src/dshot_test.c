@@ -8,6 +8,8 @@ static uint32_t motor1_dmabuffer[DSHOT_DMA_BUFFER_SIZE];
 static uint32_t motor2_dmabuffer[DSHOT_DMA_BUFFER_SIZE];
 
 #ifdef USE_TEMLEMETRY
+static uint32_t motor1_response_buffer[BIDSHOT_RESPONSE_BUFFER_SIZE];
+static uint32_t motor2_response_buffer[BIDSHOT_RESPONSE_BUFFER_SIZE];
 static float erpmToHz = ERPM_PER_LSB / SECONDS_PER_MINUTE / (MOTOR_POLE_COUNT / 2.0f);
 bool useDshotTelemetry = false;
 #endif
@@ -144,21 +146,53 @@ static uint32_t decode_telemetry_packet(const uint32_t buffer[], uint32_t count)
     return decodedValue >> 4;
 }
 
-void gpio_set_input(uint8_t motor_index) {
-    uint16_t MOTOR_PIN[2] = {MOTOR1_PIN, MOTOR2_PIN};
-    GPIO_TypeDef *MOTOR_PIN_GPIO_PORT[2] = {MOTOR1_PIN_GPIO_PORT, MOTOR2_PIN_GPIO_PORT};
+static void dshot_ic_dma_tc_callback(DMA_HandleTypeDef *hdma) {}
+
+/// Set the pin and timer channel to input capture mode
+void dshot_set_input(uint8_t motor_index) {
+    GPIO_TypeDef *PORT[2] = {MOTOR1_PIN_GPIO_PORT, MOTOR2_PIN_GPIO_PORT};
+    uint16_t PIN[2] = {MOTOR1_PIN, MOTOR2_PIN};
+    uint32_t TIM_CH[2] = {TIM_CHANNEL_1, TIM_CHANNEL_2};
+    uint32_t TIM_DMA_CC[2] = {TIM_DMA_CC1, TIM_DMA_CC2};
+    uint32_t TIM_DMA_ID[2] = {TIM_DMA_ID_CC1, TIM_DMA_ID_CC2};
 
     // Set the pin to input mode with pull-up resistor
     GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = MOTOR_PIN[motor_index];
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pin = PIN[motor_index];
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(PORT[motor_index], &GPIO_InitStruct);
 
-    //
+    // Set the timer channel to input capture mode
     htim1.Instance = TIM1;
+    htim1.Init.Prescaler = 0;
+    htim1.Init.Period = 0xffffffff;  // if 16 bit timer, set to 0xffff,32 bit timer, set to 0xffffffff
+    htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+    HAL_TIM_IC_Init(&htim1);
 
-    // Deinitialize the DMA associated with the timer channel
+    TIM_IC_InitTypeDef sConfigIC = {0};
+    sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+    sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+    sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+    sConfigIC.ICFilter = 0;
+    HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CH[motor_index]);
+
+    // Reinitialize the DMA associated with the timer channel
+    DMA_HandleTypeDef *hdma = htim1.hdma[TIM_DMA_ID[motor_index]];
+    if (hdma) {
+        HAL_DMA_Abort(hdma);
+        HAL_DMA_DeInit(hdma);
+        hdma->Init.Direction = DMA_PERIPH_TO_MEMORY;
+        hdma->Init.PeriphInc = DMA_PINC_DISABLE;
+        hdma->Init.MemInc = DMA_MINC_ENABLE;
+        hdma->Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
+        hdma->Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
+        hdma->Init.Mode = DMA_NORMAL;
+        hdma->Init.Priority = DMA_PRIORITY_HIGH;
+        HAL_DMA_Init(hdma);
+        hdma->XferCpltCallback = dshot_ic_dma_tc_callback;
+    }
 }
 #endif
 
@@ -190,6 +224,8 @@ static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
         __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC1);
 #ifdef USE_TEMLEMETRY
         if (useDshotTelemetry) {
+            HAL_TIM_PWM_Stop(MOTOR_1_TIM, MOTOR1_TIM_CHANNEL);
+            dshot_set_input(0);
         }
 #endif
     }
@@ -197,6 +233,8 @@ static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
         __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC2);
 #ifdef USE_TEMLEMETRY
         if (useDshotTelemetry) {
+            HAL_TIM_PWM_Stop(MOTOR_2_TIM, MOTOR2_TIM_CHANNEL);
+            dshot_set_input(1);
         }
 #endif
     }
@@ -220,11 +258,13 @@ void esc_unlock(void) {
 }
 
 /// @brief change the motor rotation direction
-/// @param change
-void motor_change_rotation(uint16_t motor_index, bool change) {
+/// @param clockwise
+void motor_change_rotation(uint16_t motor_index, bool clockwise) {
     uint16_t command = 0;
-    if (change) {
+    if (clockwise) {
         command = 8;
+    } else {
+        command = 7;
     }
     uint32_t start = HAL_GetTick();
     uint16_t motor_value[4] = {0, 0, 0, 0};

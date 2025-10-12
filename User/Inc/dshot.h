@@ -6,6 +6,7 @@
 #define RM_DSHOT_DSHOT_H
 
 // User include
+#include "dma.h"
 #include "gpio.h"
 #include "main.h"
 #include "math.h"
@@ -13,15 +14,12 @@
 #include "stdio.h"
 #include "tim.h"
 
-
-// #define USE_TEMLEMETRY
+#define USE_TEMLEMETRY
 
 #define MHZ_TO_HZ(x) ((x) * 1000000)
 
 #define DSHOT600_HZ MHZ_TO_HZ(12)
 #define DSHOT300_HZ MHZ_TO_HZ(6)
-#define DSHOT150_HZ MHZ_TO_HZ(3)
-#define BIDSHOT_RESPONSE_HZ MHZ_TO_HZ(6 * 5 / 4)  // For dshot600
 
 #define DSHOT_TELEMETRY_NOEDGE (0xfffe)
 #define DSHOT_TELEMETRY_INVALID (0xffff)
@@ -32,13 +30,6 @@
 #define MOTOR_MAX_VOLTAGE 24.0f  // Should be set according to the actual battery voltage
 #define MOTOR_MAX_RPM (MOTOR_KV * MOTOR_MAX_VOLTAGE)
 
-typedef enum {
-    MOTOR_PROTOCOL_DSHOT150,
-    MOTOR_PROTOCOL_DSHOT300,
-    MOTOR_PROTOCOL_DSHOT600,
-} motorProtocolTypes_e;
-
-/// For dshot600.The term of pwm is 1.67us,the bit1 is 1.25us high level, and the bit0 is 0.625us high level
 #define MOTOR_BIT_0 7
 #define MOTOR_BIT_1 14
 #define MOTOR_BITLENGTH 20
