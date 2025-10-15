@@ -39,6 +39,8 @@
 /// two additional bits are added at the end with actual compare values of 0.
 #define DSHOT_DMA_BUFFER_SIZE 18
 #define BIDSHOT_RESPONSE_BUFFER_SIZE 22
+#define MIN_GCR_EDGES (7)
+#define DSHOT_TELEMETRY_DEADTIME_US (30 + 5)  // 30 to switch lines and 5 to switch lines back
 
 // test
 #define MOTOR_1_TIM (&htim1)
@@ -54,4 +56,6 @@ void dshot_init(void);
 void dshot_write(uint16_t* motor_value, bool requestTelemetry);
 void dshot_send(uint16_t* motor_value, bool requestTelemetry);
 void dshot_loop(void);
+void dshot_set_output(uint8_t motor_index);
+static void dshot_dma_tc_callback(DMA_HandleTypeDef* hdma);
 #endif  // RM_DSHOT_DSHOT_H
