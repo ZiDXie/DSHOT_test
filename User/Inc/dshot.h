@@ -12,6 +12,7 @@
 #include "math.h"
 #include "stdbool.h"
 #include "stdio.h"
+#include "string.h"
 #include "tim.h"
 
 #define USE_TEMLEMETRY

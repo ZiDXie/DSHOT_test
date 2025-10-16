@@ -13,12 +13,12 @@ uint32_t TIM_CH[2] = {TIM_CHANNEL_1, TIM_CHANNEL_2};
 uint32_t TIM_DMA_CC[2] = {TIM_DMA_CC1, TIM_DMA_CC2};
 uint32_t TIM_DMA_ID[2] = {TIM_DMA_ID_CC1, TIM_DMA_ID_CC2};
 bool is_input[2] = {false, false};
+bool unlocked = false;
 
 #ifdef USE_TEMLEMETRY
 static uint32_t motor_response_buffer[2][BIDSHOT_RESPONSE_BUFFER_SIZE];
 static float erpmToHz = ERPM_PER_LSB / SECONDS_PER_MINUTE / (MOTOR_POLE_COUNT / 2.0f);
 float rpm[2] = {0.0f, 0.0f};
-bool is_input[2] = {false, false};
 bool useDshotTelemetry = false;
 int32_t dshotTelemetryDeadtimeUs;
 uint32_t inputStampUs;
@@ -93,6 +93,12 @@ void DWT_Init(void) {
 
 uint32_t micros(void) { return HAL_GetTick() * 1000 + (uint32_t) (DWT->CYCCNT / (HAL_RCC_GetHCLKFreq() / 1000000)); }
 
+void delay_us(uint32_t us) {
+    uint32_t start = micros();
+    while ((micros() - start) < us) {
+        __NOP();
+    }
+}
 /// Decode the eRPM telemetry value from the ESC
 static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {
     // eRPM range
@@ -167,12 +173,13 @@ bool dshot_temelemetry_decode() {
         return false;
     }
     for (int i = 0; i < 2; i++) {
+        DMA_HandleTypeDef *hdma = htim1.hdma[TIM_DMA_ID[i]];
         if (is_input[i]) {
-            uint32_t edges = BIDSHOT_RESPONSE_BUFFER_SIZE - __HAL_DMA_GET_COUNTER();
-            __HAL_TIM_DISABLE_DMA();
+            uint32_t edges = BIDSHOT_RESPONSE_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(hdma);
+            __HAL_TIM_DISABLE_DMA(&htim1, TIM_DMA_CC[i]);
             uint16_t rawValue;
             if (edges > MIN_GCR_EDGES) {
-                rawValue = decode_telemetry_packet(, edges);
+                rawValue = decode_telemetry_packet(motor_response_buffer[i], edges);
                 if (rawValue != DSHOT_TELEMETRY_INVALID) {
                     uint32_t erpm = dshot_decode_eRPM_telemetry_value(rawValue);
                     if (erpm != DSHOT_TELEMETRY_INVALID) {
@@ -192,14 +199,20 @@ bool dshot_temelemetry_decode() {
 }
 
 /// DMA transfer complete callback for input capture mode
-static void dshot_ic_dma_tc_callback(DMA_HandleTypeDef *hdma) {}
+static void dshot_ic_dma_tc_callback(DMA_HandleTypeDef *hdma) {
+    printf("enter callback\r\n");
+    dshot_temelemetry_decode();
+}
 
 /// Set the pin and timer channel to input capture mode
 void dshot_set_input(uint8_t motor_index) {
+    printf("enter input mode %d\r\n", motor_index);
     // Set the pin to input mode with pull-up resistor
+    HAL_TIM_PWM_Stop(&htim1, TIM_CH[motor_index]);
+
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     GPIO_InitStruct.Pin = PIN[motor_index];
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(PORT[motor_index], &GPIO_InitStruct);
@@ -243,13 +256,6 @@ void dshot_set_input(uint8_t motor_index) {
 
 /// Set the pin and timer channel to output pwm mode
 void dshot_set_output(uint8_t motor_index) {
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = PIN[motor_index];
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(PORT[motor_index], &GPIO_InitStruct);
-
     is_input[motor_index] = false;
 
     TIM_OC_InitTypeDef sConfigOC = {0};
@@ -269,6 +275,13 @@ void dshot_set_output(uint8_t motor_index) {
     sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
     sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
     HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CH[motor_index]);
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = PIN[motor_index];
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(PORT[motor_index], &GPIO_InitStruct);
 
     DMA_HandleTypeDef *hdma = htim1.hdma[TIM_DMA_ID[motor_index]];
     if (hdma) {
@@ -323,12 +336,11 @@ static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
         HAL_DMA_Abort(hdma);
         __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC[motor_index]);
 #ifdef USE_TEMLEMETRY
-        if (useDshotTelemetry) {
-            dshot_set_input(motor_index);
-            HAL_TIM_IC_Start_DMA(&htim1, TIM_CH[motor_index], (uint32_t *) motor_response_buffer[motor_index],
-                                 BIDSHOT_RESPONSE_BUFFER_SIZE);
+        if (unlocked) {
+            if (useDshotTelemetry) {
+                dshot_set_input(motor_index);
+            }
         }
-
 #endif
     }
 }
@@ -358,27 +370,27 @@ void motor_change_rotation(uint16_t motor_index, bool clockwise) {
     while (HAL_GetTick() - start < 50) {
         dshot_send(motor_value, true);
     }
+    unlocked = true;
 }
 
 /// configure the motor
 void motor_configure() {
     motor_change_rotation(0, true);
     motor_change_rotation(1, false);
+}
+
+/// dshot init
+void dshot_init(void) {
 #ifdef USE_TEMLEMETRY
     useDshotTelemetry = true;
     TIMER_OUTPUT_INVERTED = true;
     dshotTelemetryDeadtimeUs = DSHOT_TELEMETRY_DEADTIME_US + 1000000 * (16 * MOTOR_BITLENGTH) / DSHOT300_HZ;
 #endif
-}
-
-/// dshot init
-void dshot_init(void) {
-    printf("Dshot init start\r\n");
+    DWT_Init();
     dshot_set_output(0);
     dshot_set_output(1);
     esc_unlock();
     motor_configure();
-    printf("Init complete\r\n");
 }
 
 /// Write the motor value to the motor
@@ -391,13 +403,13 @@ void dshot_write(uint16_t *motor_value, bool requestTelemetry) {
 /// Send the motor value to the motor
 void dshot_send(uint16_t *motor_value, bool requestTelemetry) {
     dshot_write(motor_value, requestTelemetry);
-    HAL_Delay(1);
+    delay_us(50);
 }
 
 /// Dshot test loop
 void dshot_loop(void) {
     uint16_t motor_value[4] = {0, 0, 0, 0};
-    uint16_t command = 100;
+    uint16_t command = 0;
     for (int i = 0; i < 4; i++) {
         motor_value[i] = command;
     }
