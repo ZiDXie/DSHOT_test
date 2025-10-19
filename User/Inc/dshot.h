@@ -21,6 +21,7 @@
 
 #define DSHOT600_HZ MHZ_TO_HZ(12)
 #define DSHOT300_HZ MHZ_TO_HZ(6)
+#define DSHOT150_HZ MHZ_TO_HZ(3)
 
 #define DSHOT_TELEMETRY_NOEDGE (0xfffe)
 #define DSHOT_TELEMETRY_INVALID (0xffff)

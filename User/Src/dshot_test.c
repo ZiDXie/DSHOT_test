@@ -85,7 +85,6 @@ uint16_t rpm_to_dshot_value(float rpm) {
     return (uint16_t) dshot_value;
 }
 
-#ifdef USE_TEMLEMETRY
 void DWT_Init(void) {
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
     DWT->CYCCNT = 0;
@@ -101,6 +100,9 @@ void delay_us(uint32_t us) {
     }
 }
 
+void dshot_hw_config(void) {}
+
+#ifdef USE_TEMLEMETRY
 /// Decode the eRPM telemetry value from the ESC
 static uint32_t dshot_decode_eRPM_telemetry_value(uint16_t value) {
     // eRPM range
@@ -170,10 +172,11 @@ bool dshot_temelemetry_decode() {
         return false;
     }
     const uint32_t currentUs = micros();
-    uint32_t usSinceInput = currentUs - inputStampUs;
+    int32_t usSinceInput = currentUs - inputStampUs;
     printf("usSinceInput: %d\r\n", usSinceInput);
     if (usSinceInput >= 0 && usSinceInput < DSHOT_TELEMETRY_DEADTIME_US) {
         printf("error\r\n");
+        // printf("usSinceInput: %d\r\n", usSinceInput);
         return false;
     }
     for (int i = 0; i < 2; i++) {
@@ -207,6 +210,10 @@ bool dshot_temelemetry_decode() {
 /// Set the pin and timer channel to input capture mode
 void dshot_set_input(uint8_t motor_index) {
     // Set the pin to input mode with pull-up resistor
+    is_input[motor_index] = true;
+    if (!inputStampUs) {
+        inputStampUs = micros();
+    }
 
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     GPIO_InitStruct.Pin = PIN[motor_index];
@@ -215,15 +222,15 @@ void dshot_set_input(uint8_t motor_index) {
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(PORT[motor_index], &GPIO_InitStruct);
 
-    is_input[motor_index] = true;
-    if (!inputStampUs) {
-        inputStampUs = micros();
-    }
-
     // Set the timer channel to input capture mode
     htim1.Instance = TIM1;
     htim1.Init.Prescaler = 0;
     htim1.Init.Period = 0xffff;  // if 16 bit timer, set to 0xffff,32 bit timer, set to 0xffffffff
+    htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    htim1.Init.RepetitionCounter = 0;
+    htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+    HAL_TIM_Base_Init(&htim1);
     HAL_TIM_IC_Init(&htim1);
 
     TIM_IC_InitTypeDef sConfigIC = {0};
@@ -240,24 +247,16 @@ void dshot_set_input(uint8_t motor_index) {
         HAL_DMA_DeInit(hdma);
         hdma->Instance = DMA_CHANNEL[motor_index];
         hdma->Init.Direction = DMA_PERIPH_TO_MEMORY;
+        hdma->Init.PeriphInc = DMA_PINC_DISABLE;
+        hdma->Init.MemInc = DMA_MINC_ENABLE;
+        hdma->Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
+        hdma->Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
+        hdma->Init.Mode = DMA_NORMAL;
+        hdma->Init.Priority = DMA_PRIORITY_HIGH;
         HAL_DMA_Init(hdma);
     }
 }
 
-void dshot_read_response(uint8_t motor_index) {
-    if (unlocked) {
-        is_input[motor_index] = true;
-        if (useDshotTelemetry) {
-            dshot_set_input(motor_index);
-            memset((void *) motor_response_buffer[motor_index], 0, sizeof(motor_response_buffer[motor_index]));
-            HAL_TIM_IC_Start_DMA(&htim1, TIM_CH[motor_index], (uint32_t *) motor_response_buffer[motor_index],
-                                 BIDSHOT_RESPONSE_BUFFER_SIZE);
-            printf("enter decode\r\n");
-            delay_us(60);
-            dshot_temelemetry_decode();
-        }
-    }
-}
 #endif
 
 /// Set the pin and timer channel to output pwm mode
@@ -267,8 +266,11 @@ void dshot_set_output(uint8_t motor_index) {
     TIM_OC_InitTypeDef sConfigOC = {0};
     htim1.Instance = TIM1;
     htim1.Init.Prescaler = 12 - 1;
+    htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
     htim1.Init.Period = 20 - 1;
+    htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htim1.Init.RepetitionCounter = 0;
+    htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
     HAL_TIM_Base_Init(&htim1);
     sConfigOC.OCMode = TIM_OCMODE_PWM1;
     sConfigOC.Pulse = 0;
@@ -291,6 +293,12 @@ void dshot_set_output(uint8_t motor_index) {
         HAL_DMA_Abort(hdma);
         HAL_DMA_DeInit(hdma);
         hdma->Init.Direction = DMA_MEMORY_TO_PERIPH;
+        hdma->Init.PeriphInc = DMA_PINC_DISABLE;
+        hdma->Init.MemInc = DMA_MINC_ENABLE;
+        hdma->Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
+        hdma->Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
+        hdma->Init.Mode = DMA_NORMAL;
+        hdma->Init.Priority = DMA_PRIORITY_HIGH;
         HAL_DMA_Init(hdma);
         hdma->XferCpltCallback = dshot_dma_tc_callback;
     }
@@ -336,8 +344,8 @@ static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
                 dshot_set_input(motor_index);
                 HAL_TIM_IC_Start_DMA(&htim1, TIM_CH[motor_index], (uint32_t *) motor_response_buffer[motor_index],
                                      BIDSHOT_RESPONSE_BUFFER_SIZE);
-                printf("enter decode\r\n");
                 dshot_temelemetry_decode();
+                // dshot_set_output(motor_index);
             }
         }
 #endif
@@ -369,7 +377,8 @@ void motor_change_rotation(uint16_t motor_index, bool clockwise) {
     uint16_t motor_value[4] = {0, 0, 0, 0};
     motor_value[motor_index] = command;
     while (HAL_GetTick() - start < 50) {
-        dshot_send(motor_value, true);
+        dshot_write(motor_value, true);
+        delay_us(100);
     }
     unlocked = true;
 }
